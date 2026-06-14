@@ -1,3 +1,5 @@
+> **Note:** This excerpt is based on the [current arXiv version of the paper](https://arxiv.org/abs/2509.21862). The appendix provides further details on the experimental setup; below we summarize the 10 Shachi tasks covered there.
+
 ## 10 tasks in Shachi
 
 | # | Lvl | Task | Description |
