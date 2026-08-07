@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from shachi import Environment
 
 # Explicit imports for all envs/classes used in tests
-from shachi.env.auction_arena.auction_env import AuctionEnvironment, AuctionResult
+from shachi.env.auction_arena.auction_env import AuctionEnvironment, AuctionResult, WonItemResult
 from shachi.env.auction_arena.observation import BidResponse, PlanResponse
 from shachi.env.cognitive_biases.cognitive_biases_env import (
     CognitiveBiasDecisionResult,
@@ -201,6 +201,59 @@ async def test_auction_arena_lifecycle_strict():
     result = await run_until_done(env, make_response)
     assert isinstance(result, AuctionResult)
     assert len(result.item_results) == 1
+
+
+@pytest.mark.anyio
+async def test_auction_arena_rebid_keeps_bids_from_the_same_round():
+    """A re-bid must not discard bids already accepted earlier in the same round.
+
+    Only the bidders whose bids were rejected are asked to bid again, so the
+    responses of a re-bid pass cover just those bidders. Bidder 0's valid $2,000
+    has to survive bidder 1's re-bid; if it is dropped, the highest legitimate
+    bid disappears and the item is hammered to the wrong bidder at a lower price
+    -- or, as here, not sold at all.
+    """
+    env = AuctionEnvironment(
+        items=[
+            {
+                "id": 1,
+                "name": "A",
+                "desc": "item A",
+                "price": 1000,
+                "estimated_value": 1200,
+                "_true_value": 1500,
+            }
+        ],
+        bidders=[
+            {"budget": 10_000, "desire_desc": "maximize_profit"},
+            {"budget": 10_000, "desire_desc": "maximize_profit"},
+            {"budget": 10_000, "desire_desc": "maximize_profit"},
+        ],
+        min_markup_pct=0.1,
+    )
+
+    # Bidder 1 opens below the starting price, so its bid is rejected and it is
+    # the only bidder asked to bid again. Bidders 0 and 2 have already answered.
+    scripted_bids = {0: [2000], 1: [500, -1], 2: [-1]}
+
+    def make_response(obs, rtype):
+        if rtype is PlanResponse:
+            return PlanResponse(plan="Plan: bid up to the estimated value.")
+        if rtype is BidResponse:
+            queue = scripted_bids[obs.agent_id]
+            return BidResponse(bid_amount=queue.pop(0) if queue else -1)
+        if inspect.isclass(rtype) and issubclass(rtype, BaseModel):
+            return build_minimal_pydantic(rtype)
+        return None
+
+    result = await run_until_done(env, make_response)
+
+    assert not scripted_bids[1], "bidder 1 was never asked to re-bid, so the test proves nothing"
+    assert len(result.item_results) == 1
+    item = result.item_results[0]
+    assert isinstance(item, WonItemResult), "the accepted $2,000 bid was dropped and the item went unsold"
+    assert item.bidder_id == 0
+    assert item.bid_amount == 2000
 
 
 # ---------------------------------------------------------------------
