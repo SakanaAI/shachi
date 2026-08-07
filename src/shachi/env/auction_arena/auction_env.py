@@ -230,7 +230,15 @@ class AuctionEnvironment(Environment):
             elif self._current_stage == AuctionStage.BID_COLLECT:
                 # Process BidResponses
                 valid_bids, invalid_bids = self._validate_and_collect_bids(responses)
-                self._bids_this_round = valid_bids
+                if self._rebid_counts > 0:
+                    # This is a re-bid pass: only the bidders whose bids were rejected are
+                    # asked again, so `valid_bids` covers just them. Merge instead of
+                    # replacing, otherwise bids already accepted earlier in this same round
+                    # would be silently dropped and the item could be hammered to the wrong
+                    # bidder at a lower price.
+                    self._bids_this_round.update(valid_bids)
+                else:
+                    self._bids_this_round = valid_bids
                 # Handle invalid bids only up to once
                 if self._rebid_counts == 0 and invalid_bids:
                     logger.warning(f"WARNING: Invalid bids received: {invalid_bids}")
