@@ -34,7 +34,7 @@ dependencies = [
     "unstructured",
     # EmotionBench
     "seaborn>=0.13.2",
-    "umap>=0.1.1",
+    "umap-learn>=0.5",
     # SocioDojo
     "selenium>=4.30.0",
     # Sotopia
