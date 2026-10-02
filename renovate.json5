@@ -1,0 +1,61 @@
+{
+  // Renovate configuration tuned for this repo's recurring Wiz findings:
+  // stale transitive dependencies in uv.lock.
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    'config:recommended',
+    ':semanticCommitsDisabled',
+  ],
+  timezone: 'Asia/Tokyo',
+  // Weekly batch to limit PR noise. Vulnerability-fix PRs always ignore the
+  // schedule and open immediately.
+  schedule: ['before 9am on monday'],
+  labels: ['dependencies'],
+  // Renovate's default, stated explicitly: use GitHub auto-merge so automerge
+  // candidates land as soon as required checks pass.
+  platformAutomerge: true,
+  // Refresh transitive dependencies in uv.lock weekly (handled by the pep621
+  // manager, which supports uv.lock). Lockfile rot is the #1 source of our
+  // Wiz High findings, so this is automerged once CI is green.
+  lockFileMaintenance: {
+    enabled: true,
+    schedule: ['before 9am on monday'],
+    automerge: true,
+  },
+  // Raise fix PRs from GitHub vulnerability alerts immediately, labeled for
+  // triage. Requires Dependency graph + Dependabot alerts in repo settings,
+  // and the labels to exist. minimumReleaseAge: null exempts security fixes
+  // from the 7-day cooldown below.
+  vulnerabilityAlerts: {
+    enabled: true,
+    labels: ['security', 'priority/high'],
+    minimumReleaseAge: null,
+  },
+  // Also match packages against the OSV database, which does not depend on
+  // GitHub's alert settings.
+  osvVulnerabilityAlerts: true,
+  packageRules: [
+    {
+      // Supply-chain cooldown: wait 7 days after a release before proposing
+      // it (same convention as SakanaAI/proj_torafugu_app and marlin).
+      // Scoped to update types that carry a release timestamp so pins,
+      // digests and lockfile refreshes are never held back.
+      matchDatasources: ['npm', 'pypi'],
+      matchUpdateTypes: ['major', 'minor', 'patch'],
+      minimumReleaseAge: '7 days',
+    },
+    {
+      // Group non-major Python updates (pyproject.toml + uv.lock, plus the
+      // cognitive_biases requirements.txt) into one weekly PR.
+      matchManagers: ['pep621', 'pip_requirements'],
+      matchUpdateTypes: ['minor', 'patch', 'pin'],
+      groupName: 'python dependencies (non-major)',
+    },
+    {
+      // Automerge patch-level updates once required checks pass. Everything
+      // minor/major stays a normal PR for human review.
+      matchUpdateTypes: ['patch'],
+      automerge: true,
+    },
+  ],
+}
